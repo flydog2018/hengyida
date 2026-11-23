@@ -59,6 +59,7 @@
 
 ## 自检清单
 - [ ] `pnpm run typecheck` 通过
+- [ ] `pnpm --filter @hengyida/shared build` 通过（server 测试依赖 shared 的 dist 入口，全新检出需先构建）
 - [ ] `pnpm test` 通过（当前基线 62 项）
 - [ ] 涉及主链路时 `pnpm run e2e:chain` 通过（需本地 MySQL 容器 healthy）
 - [ ] 未提交任何 `.env`、口令、密钥、备份数据

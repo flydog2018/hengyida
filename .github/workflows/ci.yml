@@ -37,6 +37,11 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      # server 的 vitest 通过 @hengyida/shared 的 dist 入口解析工作区包，
+      # dist 是构建产物且被 .gitignore 忽略，CI 全新检出时不存在，需先构建。
+      - name: Build shared package
+        run: pnpm --filter @hengyida/shared build
+
       - name: Unit tests
         run: pnpm test
 

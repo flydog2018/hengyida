@@ -167,7 +167,7 @@ prod 基线额外启用：MySQL 只读根文件系统 + `tmpfs`、CPU/内存限�
 ### 协作流程：本地开发 → 提交 → CI → 部署
 
 1. **本地开发**：从 `develop` 切 `feature/<简述>` 分支；`pnpm run bootstrap` 准备本地环境，按 `CONTRIBUTING.md` 的规范开发。
-2. **自检**：提交前依次跑 `pnpm run typecheck`、`pnpm test`、`pnpm run e2e:chain`（涉及主链路时）、`pnpm run compose:check`；确认无 `.env`/口令入库。
+2. **自检**：提交前依次跑 `pnpm run typecheck`、`pnpm --filter @hengyida/shared build`（server 测试依赖 shared 的 dist 入口，全新检出需先构建）、`pnpm test`、`pnpm run e2e:chain`（涉及主链路时）、`pnpm run compose:check`；确认无 `.env`/口令入库。
 3. **提交**：按 Conventional Commits 写 message（`feat:` / `fix:` / `docs:` / `chore:` ...），push 分支并开 PR 回 `develop`。
 4. **CI**：PR 触发 GitHub Actions（typecheck → test → 四套 compose config）；徽章见本文档顶部，红了先看 Actions 日志，本地复现后再修，CI 不绿不合并。
 5. **部署**：合并回 `main` 后打语义化版本 tag（当前 `v0.1.0`，见 `CHANGELOG.md`）；私有化在目标机执行 `pnpm run docker:up && pnpm run migrate && pnpm run dev`，生产务必先 `pnpm run secrets:rotate` 换强凭据。
