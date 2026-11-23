@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局基线：字体与字体族由 tailwind.config.ts 统一声明，此处只做布局与滚动条细节 */
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225); /* 中性滚动条，非品牌色 */
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* MUI 按钮禁用默认全大写，保持中文界面克制的企业调性 */
+.MuiButton-root,
+.MuiToggleButton-root {
+  text-transform: none !important;
+}

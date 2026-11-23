@@ -1,0 +1,41 @@
+{
+  "name": "hengyida",
+  "version": "1.1.0",
+  "private": true,
+  "description": "恒易搭（HengYiDa）零代码搭建平台 · 内部代号织蜂（zhifeng / weaver）",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "prestart": "node scripts/ensure-docker-path.mjs --check",
+    "start": "node scripts/dev.mjs",
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "wsl2:check": "node scripts/check-wsl2.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:designer": "npm run dev -w @hengyida/designer",
+    "dev:runtime": "npm run dev -w @hengyida/runtime",
+    "dev:server": "npm run dev -w @hengyida/server",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "migrate": "node scripts/migrate.mjs",
+    "e2e:chain": "node scripts/e2e-chain.mjs",
+    "secrets:rotate": "node scripts/generate-secrets.mjs",
+    "docker:up": "node scripts/ensure-docker-path.mjs -- docker compose up -d",
+    "docker:ps": "node scripts/ensure-docker-path.mjs -- docker compose ps",
+    "compose:check": "node scripts/ensure-docker-path.mjs -- docker compose config -q && node scripts/ensure-docker-path.mjs -- docker compose -f deployments/dev/docker-compose.yml --env-file deployments/dev/.env.example config -q && node scripts/ensure-docker-path.mjs -- docker compose -f deployments/staging/docker-compose.yml --env-file deployments/staging/.env.example config -q && node scripts/ensure-docker-path.mjs -- docker compose -f deployments/prod/docker-compose.yml --env-file deployments/prod/.env.example config -q",
+    "backup:once": "node scripts/ensure-docker-path.mjs -- docker compose run --rm -e ONCE=1 mysql-backup",
+    "clean": "node scripts/clean.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.0",
+    "turbo": "^1.12.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "packages/shared/index.ts",
+    "packages/shared/types/**/*.ts",
+    "packages/shared/constants/**/*.ts",
+    "packages/shared/utils/**/*.ts",
+    "packages/designer/src/**/*.ts",
+    "packages/designer/src/**/*.tsx",
+    "packages/runtime/src/**/*.ts",
+    "packages/runtime/src/**/*.tsx",
+    "packages/server/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", "**/dist", "**/build"]
+}

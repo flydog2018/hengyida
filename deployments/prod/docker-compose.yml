@@ -1,0 +1,110 @@
+# 恒易搭 · 生产环境基线（独立项目名 / 端口 / 命名卷 + 加固）
+# 用法：docker compose -f deployments/prod/docker-compose.yml --env-file deployments/prod/.env up -d
+# 加固点：mysql:8.0 只读根文件系统 + tmpfs + 内存/CPU 限额 + always 重启 + no-new-privileges
+name: hengyida-prod
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hengyida-mysql-prod
+    restart: always
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/mysqld
+      - /var/lib/mysql-files
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          memory: 512M
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required in deployments/prod/.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hengyida}
+      MYSQL_USER: ${MYSQL_USER:-hengyida}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?required in deployments/prod/.env}
+      TZ: Asia/Shanghai
+    ports:
+      - '127.0.0.1:${MYSQL_HOST_PORT:-3308}:3306'
+    volumes:
+      - mysql-data-prod:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mysqladmin ping -h 127.0.0.1 -u root --password="$$MYSQL_ROOT_PASSWORD" --silent'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  server:
+    build:
+      context: ../..
+      dockerfile: deployments/saas/Dockerfile
+    container_name: hengyida-server-prod
+    restart: always
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DEPLOY_MODE: private
+      PORT: 3000
+      API_PREFIX: api
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${MYSQL_USER:-hengyida}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?required in deployments/prod/.env}
+      DB_NAME: ${MYSQL_DATABASE:-hengyida}
+      JWT_SECRET: ${JWT_SECRET:?required in deployments/prod/.env}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+    ports:
+      - '127.0.0.1:${SERVER_HOST_PORT:-3002}:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/healthz']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mysql-backup:
+    image: mysql:8.0
+    container_name: hengyida-mysql-backup-prod
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required in deployments/prod/.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hengyida}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      TZ: Asia/Shanghai
+    volumes:
+      - ../../backups/prod:/backups
+      - ../../scripts/mysql-backup.sh:/usr/local/bin/mysql-backup.sh:ro
+    entrypoint: ['/bin/sh', '/usr/local/bin/mysql-backup.sh']
+
+volumes:
+  mysql-data-prod:

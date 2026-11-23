@@ -1,0 +1,81 @@
+# 恒易搭 · 开发环境（独立项目名 / 端口 / 命名卷）
+# 用法：docker compose -f deployments/dev/docker-compose.yml --env-file deployments/dev/.env up -d
+name: hengyida-dev
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hengyida-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required in deployments/dev/.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hengyida}
+      MYSQL_USER: ${MYSQL_USER:-hengyida}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?required in deployments/dev/.env}
+      TZ: Asia/Shanghai
+    ports:
+      - '127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306'
+    volumes:
+      - mysql-data-dev:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'mysqladmin ping -h 127.0.0.1 -u root --password="$$MYSQL_ROOT_PASSWORD" --silent'
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  server:
+    build:
+      context: ../..
+      dockerfile: deployments/saas/Dockerfile
+    container_name: hengyida-server-dev
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DEPLOY_MODE: private
+      PORT: 3000
+      API_PREFIX: api
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${MYSQL_USER:-hengyida}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?required in deployments/dev/.env}
+      DB_NAME: ${MYSQL_DATABASE:-hengyida}
+      JWT_SECRET: ${JWT_SECRET:?required in deployments/dev/.env}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    ports:
+      - '127.0.0.1:${SERVER_HOST_PORT:-3000}:3000'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/healthz']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mysql-backup:
+    image: mysql:8.0
+    container_name: hengyida-mysql-backup-dev
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required in deployments/dev/.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-hengyida}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      TZ: Asia/Shanghai
+    volumes:
+      - ../../backups/dev:/backups
+      - ../../scripts/mysql-backup.sh:/usr/local/bin/mysql-backup.sh:ro
+    entrypoint: ['/bin/sh', '/usr/local/bin/mysql-backup.sh']
+
+volumes:
+  mysql-data-dev:

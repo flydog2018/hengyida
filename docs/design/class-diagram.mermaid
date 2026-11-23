@@ -1,0 +1,142 @@
+classDiagram
+    direction LR
+
+    class App {
+        +string id
+        +string name
+        +string description
+        +string schemaVersion
+        +Page[] pages
+        +Form[] forms
+        +publish() PublishResult
+        +exportSchema() SchemaEnvelope
+        +importSchema(env SchemaEnvelope) void
+    }
+
+    class Page {
+        +string id
+        +string title
+        +string type
+        +string[] formIds
+    }
+
+    class Form {
+        +string id
+        +string appId
+        +FormStatus status
+        +Field[] fields
+        +LayoutTree layout
+        +ListViewConfig listView
+        +string publishedSchemaHash
+        +publish() PublishResult
+        +validateSchema() ValidationResult
+    }
+
+    class Field {
+        +string id
+        +string widget
+        +string label
+        +Binding binding
+        +FieldProps props
+        +boolean required
+        +ValidationRule[] validations
+        +Condition visibleWhen
+        +AdapterConfig adapters
+        +Formula formula
+        +Field[] children
+        +Relation relation
+    }
+
+    class WidgetDefinition {
+        +string type
+        +string label
+        +string category
+        +FieldProps defaultProps
+        +DataType bindingType
+        +renderMode PC_H5
+        +validate(props FieldProps) ValidationResult
+    }
+
+    class Formula {
+        +string expr
+        +string[] deps
+        +number precision
+    }
+
+    class Relation {
+        +string targetFormId
+        +string relationType
+        +string foreignKey
+    }
+
+    class ValidationRule {
+        +string rule
+        +string value
+        +string message
+    }
+
+    class Role {
+        +string id
+        +RoleType type
+        +PermissionRule[] rules
+    }
+
+    class PermissionRule {
+        +string scope
+        +string targetId
+        +string action
+        +Condition rowCondition
+    }
+
+    class RuntimeRecord {
+        +string formId
+        +string recordId
+        +Map~string,any~ values
+        +string createdBy
+        +datetime createdAt
+    }
+
+    class SchemaEngine {
+        +validate(env SchemaEnvelope) ValidationResult
+        +migrate(env SchemaEnvelope) SchemaEnvelope
+        +exportConfig(appId) SchemaEnvelope
+        +importConfig(env SchemaEnvelope) App
+    }
+
+    class DataEngine {
+        +ensureTable(form Form) DDLResult
+        +evolveTable(form Form) DDLResult
+        +insert(formId string, data Map) RuntimeRecord
+        +query(formId string, params QueryParams) PageResult
+        +dialect Dialect
+    }
+
+    class FormulaEngine {
+        +parse(expr string) ASTNode
+        +evaluate(ast ASTNode, ctx Map) any
+        +collectDeps(expr string) string[]
+    }
+
+    class PermissionEngine {
+        +check(role Role, action string, target any) boolean
+        +filterRows(role Role, rows RuntimeRecord[]) RuntimeRecord[]
+        +resolveOrder() string[]
+    }
+
+    App "1" *-- "many" Page
+    App "1" *-- "many" Form
+    Form "1" *-- "many" Field
+    Field "many" --> "1" WidgetDefinition : 控件定义注册表
+    Field "1" --> "0..1" Formula
+    Field "1" --> "0..1" Relation
+    Field "1" *-- "many" ValidationRule
+    Field "1" *-- "many" Field : 子表(children)
+    Role "1" *-- "many" PermissionRule
+    PermissionRule "many" --> "1" Form : 授权目标
+    RuntimeRecord "many" --> "1" Form : 归属表单
+    SchemaEngine ..> Form : 校验/迁移
+    DataEngine ..> Form : 动态建表
+    DataEngine ..> RuntimeRecord : CRUD
+    FormulaEngine ..> Formula : 求值
+    PermissionEngine ..> PermissionRule : 判定
+    PermissionEngine ..> RuntimeRecord : 行级过滤

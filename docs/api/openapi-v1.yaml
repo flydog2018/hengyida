@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: 恒易搭（HengYiDa）API
+  version: '1.0.0'
+  description: >-
+    恒易搭零代码平台 REST API 契约（一期 / Phase 1）。
+    由 NestJS Swagger 同步生成，统一响应 { code, data, message }。
+servers:
+  - url: http://localhost:3000/api
+    description: 本地开发
+
+tags:
+  - name: App
+    description: 应用管理（R-001）
+  - name: Form
+    description: 表单与发布、Schema 导入导出（R-002~R-009）
+  - name: Data
+    description: 数据 CRUD 与列表（R-011）
+  - name: Auth
+    description: 登录与 JWT（R-014）
+  - name: Permission
+    description: 角色与三级权限（R-013/R-015）
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code: { type: integer, description: '0 成功，其余见错误码分段' }
+        data: { description: '业务数据' }
+        message: { type: string }
+    SchemaEnvelope:
+      type: object
+      required: [schemaVersion, kind, id, meta, payload]
+      properties:
+        schemaVersion: { type: string, example: '1.0.0' }
+        kind: { type: string, enum: [app, form, page] }
+        id: { type: string }
+        meta: { type: object }
+        payload: { type: object }
+
+paths:
+  /apps:
+    get:
+      tags: [App]
+      summary: 列出应用
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+    post:
+      tags: [App]
+      summary: 创建应用
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: '已创建' }
+
+  /apps/{appId}/forms:
+    get:
+      tags: [Form]
+      summary: 列出应用下表单
+      parameters:
+        - { in: path, name: appId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '成功' }
+
+  /forms:
+    post:
+      tags: [Form]
+      summary: 新建表单（草稿）
+      responses:
+        '201': { description: '已创建' }
+
+  /forms/{formId}/publish:
+    post:
+      tags: [Form]
+      summary: 一键发布（校验→版本+1→动态 DDL→保存 Schema）
+      parameters:
+        - { in: path, name: formId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '发布成功' }
+
+  /forms/{formId}/schema:
+    get:
+      tags: [Form]
+      summary: 导出表单配置 JSON（SchemaEnvelope）
+      parameters:
+        - { in: path, name: formId, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SchemaEnvelope' }
+    put:
+      tags: [Form]
+      summary: 导入表单配置 JSON（版本迁移后还原）
+      parameters:
+        - { in: path, name: formId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '导入成功' }
+
+  /forms/{formId}/records:
+    get:
+      tags: [Data]
+      summary: 数据列表（筛选/排序/分页）
+      parameters:
+        - { in: path, name: formId, required: true, schema: { type: string } }
+      responses:
+        '200': { description: '成功' }
+    post:
+      tags: [Data]
+      summary: 填报（服务端权威公式/校验/权限后落库）
+      parameters:
+        - { in: path, name: formId, required: true, schema: { type: string } }
+      responses:
+        '201': { description: '已创建' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 登录获取 JWT
+      responses:
+        '200': { description: '登录成功' }
+
+security:
+  - bearerAuth: []

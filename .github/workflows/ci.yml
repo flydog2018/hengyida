@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  verify:
+    name: typecheck + test + compose config
+    runs-on: ubuntu-latest
+    env:
+      # 仅用于 CI 配置校验的占位值，不是真实凭据
+      MYSQL_ROOT_PASSWORD: ci-placeholder-root
+      MYSQL_PASSWORD: ci-placeholder-user
+      MYSQL_DATABASE: hengyida
+      MYSQL_USER: hengyida
+      JWT_SECRET: ci-placeholder-jwt-secret-at-least-32-chars
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable pnpm 8.15.0
+        run: |
+          corepack enable
+          corepack prepare pnpm@8.15.0 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Compose config (root + dev/staging/prod)
+        run: |
+          docker compose config -q
+          docker compose -f deployments/dev/docker-compose.yml config -q
+          docker compose -f deployments/staging/docker-compose.yml config -q
+          docker compose -f deployments/prod/docker-compose.yml config -q

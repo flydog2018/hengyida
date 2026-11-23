@@ -1,0 +1,38 @@
+# 恒易搭 GitLab CI：MR 与主干自动触发
+# 凭据为 CI 占位值，仅用于 docker compose config 校验，不是真实凭据。
+variables:
+  MYSQL_ROOT_PASSWORD: ci-placeholder-root
+  MYSQL_PASSWORD: ci-placeholder-user
+  MYSQL_DATABASE: hengyida
+  MYSQL_USER: hengyida
+  JWT_SECRET: ci-placeholder-jwt-secret-at-least-32-chars
+
+stages:
+  - verify
+
+node:verify:
+  stage: verify
+  image: node:20
+  script:
+    - corepack enable
+    - corepack prepare pnpm@8.15.0 --activate
+    - pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com
+    - pnpm run typecheck
+    - pnpm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"
+
+compose:verify:
+  stage: verify
+  image: docker:27.5
+  script:
+    - docker compose config -q
+    - docker compose -f deployments/dev/docker-compose.yml config -q
+    - docker compose -f deployments/staging/docker-compose.yml config -q
+    - docker compose -f deployments/prod/docker-compose.yml config -q
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "master"

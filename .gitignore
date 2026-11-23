@@ -1,0 +1,31 @@
+# ===== 本地环境变量（含真实凭据，严禁提交）=====
+.env
+.env.local
+.env.*.local
+deployments/private/.env
+deployments/*/.env
+# 凭据轮换产生的备份同样含真实值
+.env.bak*
+deployments/*/.env.bak*
+# 数据库备份产物（含业务数据）
+backups/
+# 仅样例文件入库（其中为占位示例值，非真实凭据）
+!.env.example
+!deployments/private/.env.private.example
+
+# ===== 依赖与构建产物 =====
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# ===== 日志、编辑器与系统文件 =====
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

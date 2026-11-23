@@ -1,0 +1,72 @@
+%% 流程一：拖拽字段 → 配置 → 发布 → 自动建表 → runtime 渲染
+sequenceDiagram
+    autonumber
+    actor U as 搭建者(业务人员)
+    participant P as WidgetPalette / DesignCanvas<br/>(designer)
+    participant S as designerStore (Zustand)
+    participant C as ConfigCompiler (designer/engine)
+    participant V as SchemaValidator (Ajv)
+    participant API as FormController (server/modules/form)
+    participant SE as SchemaEngine (server/core)
+    participant DE as DataEngine (server/core)
+    participant DB as MetaDB + BusinessDB
+    participant R as SchemaRenderer (runtime)
+
+    U->>P: 从控件库拖入"数字"字段到画布
+    P->>S: dispatch(addField(f_price, widget=numeric))
+    U->>P: 在属性面板配置"公式字段 f_amount = f_price*f_qty"
+    P->>S: dispatch(updateField(f_amount, formula))
+    S->>C: compile(state) 生成 FormSchema JSON
+    C->>V: validate(FormSchema, schemaVersion)
+    V-->>C: 校验通过
+    U->>P: 点击"一键发布"
+    P->>API: POST /forms/:id/publish (FormSchema)
+    API->>SE: validate + 生成 publishedSchemaHash + 版本+1
+    SE-->>API: 发布版本 v3
+    API->>DE: ensureTable(FormSchema) / evolveTable(增量DDL)
+    DE->>DB: CREATE TABLE IF NOT EXISTS / ALTER TABLE ADD COLUMN
+    DB-->>DE: DDL 成功
+    DE-->>API: tableName=t_form_employee
+    API->>DB: 保存发布版本 Schema（元数据表）
+    API-->>P: {code:0, version:3, tableName}
+    Note over P,R: designer 与 runtime 唯一连接点是同一份 Schema
+    R->>API: GET /forms/:id/schema?version=3
+    API-->>R: FormSchema JSON
+    R->>R: SchemaRenderer 读 widget-registry 反向渲染控件树
+    R-->>U: 呈现可用表单（PC/H5 由 adapters 自动适配）
+
+%% 流程二：用户填报 → 公式计算 → 校验 → 行级权限过滤 → 落库
+sequenceDiagram
+    autonumber
+    actor E as 最终用户
+    participant RT as DataForm / runtime
+    participant CE as ConditionEvaluator (显示条件)
+    participant AC as API Client
+    participant FC as FormController (modules)
+    participant PE as PermissionEngine (core)
+    participant FE as FormulaEngine (core)
+    participant VE as SchemaValidator/校验器 (core)
+    participant DE as DataEngine (core)
+    participant DB as BusinessDB
+
+    E->>RT: 填写 f_price=12.5, f_qty=3, f_status=在职
+    RT->>CE: 计算 visibleWhen 显示条件
+    CE-->>RT: 显示"金额"字段
+    E->>RT: 提交表单
+    RT->>AC: POST /data/form_employee {values}
+    AC->>FC: create(formId, values, jwt)
+    FC->>PE: check(role, 'create', form) 表单级权限
+    PE-->>FC: 允许
+    FC->>FE: evaluate(f_amount = f_price*f_qty) 服务端权威计算
+    FE-->>FC: f_amount = 37.50
+    FC->>VE: validate(所有字段 required/regex/校验规则)
+    VE-->>FC: 校验通过（失败则返回 code=4xxx）
+    FC->>PE: filterRows / 注入行级权限条件（如 dept=当前部门）
+    PE-->>FC: 追加行过滤谓词
+    FC->>DE: insert(formId, values + 权限谓词)
+    DE->>DB: INSERT INTO t_form_employee (...)
+    DB-->>DE: recordId=r_1001
+    DE-->>FC: RuntimeRecord
+    FC-->>AC: {code:0, data:{recordId, values}}
+    AC-->>RT: 提交成功，刷新列表
+    Note over RT,DB: 公式与权限均在服务端执行，客户端结果不可信
