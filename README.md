@@ -1,5 +1,7 @@
 # 恒易搭（HengYiDa）
 
+![CI](https://github.com/flydog2018/hengyida/actions/workflows/ci.yml/badge.svg)
+
 > 恒信出方案，恒易搭系统。
 > 原创零代码信息化系统搭建平台 · 内部研发代号「织蜂」（zhifeng / weaver）
 
@@ -18,7 +20,7 @@
 | Schema 校验 | Ajv |
 | 认证 | JWT + 自研 RBAC / 行级规则 |
 | 部署 | Docker Compose 基础容器化 + dev/staging/prod 三套编排（K8s/计费 Phase 3） |
-| CI | GitHub Actions + GitLab CI（PR 触发：typecheck / test / compose config） |
+| CI | GitHub Actions（唯一 CI 平台，PR 触发：typecheck / test / compose config） |
 | 可观测 | pino 结构化 JSON 日志 + `GET /healthz`（DB ping + 版本） |
 
 ## 目录导航
@@ -158,9 +160,17 @@ prod 基线额外启用：MySQL 只读根文件系统 + `tmpfs`、CPU/内存限�
 
 ## CI/CD
 
-- GitHub Actions：`.github/workflows/ci.yml`，PR 与 main/master/develop push 自动触发。
-- GitLab CI：`.gitlab-ci.yml`，MR 与主干自动触发，拆成 `node:verify` 与 `compose:verify` 两个作业。
-- 两者均执行 `pnpm run typecheck`、`pnpm test`、根目录及三套环境的 `docker compose config -q`；CI 只使用占位凭据，不依赖真实 `.env`。
+- **唯一 CI 平台：GitHub Actions**。配置在 `.github/workflows/ci.yml`，PR 与 main/master/develop push 自动触发，执行 `pnpm run typecheck`、`pnpm test`、根目录及三套环境的 `docker compose config -q`；CI 只使用占位凭据，不依赖真实 `.env`。
+- 徽章见本文档顶部；也可在 Actions 页查看每次运行的详细日志。
+- 历史说明：早期版本曾同时保留 `.gitlab-ci.yml`，现已移除，统一由 GitHub Actions 承担 CI；如未来迁移平台再单独引入，避免两套配置命令漂移。
+
+### 协作流程：本地开发 → 提交 → CI → 部署
+
+1. **本地开发**：从 `develop` 切 `feature/<简述>` 分支；`pnpm run bootstrap` 准备本地环境，按 `CONTRIBUTING.md` 的规范开发。
+2. **自检**：提交前依次跑 `pnpm run typecheck`、`pnpm test`、`pnpm run e2e:chain`（涉及主链路时）、`pnpm run compose:check`；确认无 `.env`/口令入库。
+3. **提交**：按 Conventional Commits 写 message（`feat:` / `fix:` / `docs:` / `chore:` ...），push 分支并开 PR 回 `develop`。
+4. **CI**：PR 触发 GitHub Actions（typecheck → test → 四套 compose config）；徽章见本文档顶部，红了先看 Actions 日志，本地复现后再修，CI 不绿不合并。
+5. **部署**：合并回 `main` 后打语义化版本 tag（当前 `v0.1.0`，见 `CHANGELOG.md`）；私有化在目标机执行 `pnpm run docker:up && pnpm run migrate && pnpm run dev`，生产务必先 `pnpm run secrets:rotate` 换强凭据。
 
 ## 可观测性
 
