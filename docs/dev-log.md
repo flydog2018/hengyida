@@ -131,3 +131,38 @@
 - `docker compose config -q`：根 + dev/staging/prod 四套全通过。
 - `curl http://127.0.0.1:3000/healthz`：200 + JSON；server 容器 `healthy`。
 - 敏感串扫描：可提交文件 0 命中（详见最终回归输出）。
+
+---
+
+## 第五轮：生产全栈部署（本机演练）— 2026-11-23 19:40–19:52
+
+### 1. 目标与决策
+- 用户派工「恒易搭·部署上线」，拍板：**本机生产演练 + 前后端一起上线**（不碰公网）。
+- 关键缺口：原 prod 编排只有 mysql/server/backup，无前端静态托管；新增 `web` 服务统一入口。
+
+### 2. 实施
+- `vite.config.ts`（designer/runtime）新增 `VITE_BASE` 注入；生产构建 `VITE_API_BASE_URL=/api`。
+- 新增 `deployments/saas/Dockerfile.frontend`（多阶段：node 构建 designer(base=/designer/)+runtime(base=/) → nginx:1.27-alpine 托管）。
+- 新增 `deployments/prod/nginx.conf`：`/api/` 原样反代 server:3000、`/healthz` 反代、`/designer/` 与 `/` 静态托管 + SPA fallback。
+- `deployments/prod/docker-compose.yml`：server 端口映射改为 `expose: 3000`（不对外），新增 web 服务对外 `127.0.0.1:3002:80`，依赖 server healthy + healthcheck。
+- 生成 `deployments/prod/.env`（强随机凭据，已被 `.gitignore:6 deployments/*/.env` 忽略，未回显、未提交）；`.env.example` 增 `WEB_HOST_PORT` 占位。
+- 生产构建通过 `ENV` 注入 base（Linux 容器），规避 Windows Git Bash 把 `/designer/` 转成 `C:/Program Files/...` 的坑。
+
+### 3. 踩坑（已修）
+- **构建失败 1**：`server` 镜像 `npm run build -w @hengyida/shared` 报 `Cannot find module .../packages/shared/node_modules/typescript/bin/tsc`。根因：lockfile 把 typescript 提升到根，npm workspace 子包脚本的 PATH 却指向子包 `.bin`。修复：两个 Dockerfile 改用根二进制 `./node_modules/.bin/tsc -p packages/shared/tsconfig.json`（server 用 tsconfig.build.json，frontend 用 cd 到包目录 + 根 tsc/vite）。
+- **构建失败 2（本地验证阶段）**：Windows Git Bash 把命令行 `VITE_BASE=/designer/` 当作 Unix 路径转成 `/Program Files/WorkBuddy/...`，污染 dist 资源路径。确认是 shell 传参问题（Node 直接设 env 时 base 正确为 `/designer/assets/...`），生产用 Dockerfile ENV 规避。
+
+### 4. 验证结果（全通过）
+- 4 服务全 healthy：mysql(3308)、server(内网 3000)、web(3002)、mysql-backup。
+- 前端：`/` 与 `/designer/` 均 200，资源路径分别为 `/assets/*` 与 `/designer/assets/*`；静态 JS 200；SPA fallback（深层路径）200；前端产物 **零硬编码 localhost**，`/api` 存在。
+- 反代：`/healthz` 经 nginx → 200 JSON（db=up, version=1.1.0）。
+- 迁移：prod 库基线 4 表就绪；`e2e:chain`（API 走 3002 反代）**ALL PASS**：登录→搭建→发布建表→information_schema 列核验→公式权威重算 50（伪值 999999 被覆盖）→隐藏字段剔除→渲染回读。
+- `pnpm test`：62/62；敏感串扫描：提交文件 0 命中。
+
+### 5. 修改文件
+- 新增：`deployments/saas/Dockerfile.frontend`、`deployments/prod/nginx.conf`、`deployments/prod/.env`（本地忽略）。
+- 修改：`packages/designer/vite.config.ts`、`packages/runtime/vite.config.ts`、`deployments/saas/Dockerfile`、`deployments/prod/docker-compose.yml`、`deployments/prod/.env.example`、`README.md`、`docs/design/ARCHITECTURE.md`、`docs/dev-log.md`。
+
+### 6. 遗留 / 需用户决策
+- 公网上线需另配域名、HTTPS 证书、云主机/防火墙与堡垒机策略；当前仅 `127.0.0.1` 本机可达。
+- prod `.env` 为本机演练强随机值，上生产前仍建议走 `secrets:rotate` 并在目标机重新生成。

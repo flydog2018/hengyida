@@ -516,11 +516,13 @@ pnpm run e2e:chain           # 搭建→发布→自动建表→填报→渲染�
 | 本地联调 | 根 `docker-compose.yml` → `deployments/private/` | `hengyida-private` / `mysql-data` | 3306 / 3000 | 凭据本地插值、仅绑定回环 |
 | dev | `deployments/dev/docker-compose.yml` | `hengyida-dev` / `mysql-data-dev` | 3306 / 3000 | `LOG_LEVEL=debug` |
 | staging | `deployments/staging/docker-compose.yml` | `hengyida-staging` / `mysql-data-staging` | 3307 / 3001 | 近似生产配置、`LOG_LEVEL=info` |
-| prod | `deployments/prod/docker-compose.yml` | `hengyida-prod` / `mysql-data-prod` | 3308 / 3002 | `read_only: true` + `tmpfs`、CPU/内存限额、`restart: always`、`no-new-privileges` |
+| prod | `deployments/prod/docker-compose.yml` | `hengyida-prod` / `mysql-data-prod` | 3308 / **3002（web 统一入口）** | `read_only: true` + `tmpfs`、CPU/内存限额、`restart: always`、`no-new-privileges` |
 
 三套环境的本地 `.env` 均被 `.gitignore` 忽略，样例仅含占位符；`pnpm run compose:check` 可一次校验四套编排。
 
-CI 采用双平台同构门禁：GitHub Actions（`.github/workflows/ci.yml`）与 GitLab CI（`.gitlab-ci.yml`）均在 PR/MR 与主干触发 `pnpm run typecheck` → `pnpm test` → `docker compose config -q`，CI 使用占位凭据，不依赖真实 `.env`。
+**生产全栈（本机演练已验证，v0.1.0）**：`prod` 编排在 mysql/server/backup 之外新增 `web` 服务——`Dockerfile.frontend` 多阶段构建设计器与运行端静态资源，由 `nginx:alpine` 托管；设计器挂 `/designer/`、运行端挂 `/`，`nginx.conf` 将 `/api/` 原样反代到 `server:3000`（与后端全局前缀 `api` 对齐）、`/healthz` 反代到 server，均支持 SPA `try_files` fallback。生产 `server` 仅 `expose: 3000`，**不映射宿主机端口**，对外只有 web 的 3002 一个 HTTP 入口。前端 API base 由 Dockerfile 的 `ENV VITE_API_BASE_URL=/api` 注入，产物无硬编码 localhost；设计器/运行端的 `VITE_BASE` 分别在 Linux 容器内注入 `/designer/` 与 `/`，规避 Windows shell 路径转换。端到端验证：4 服务全 healthy → migrate → 经 3002 反代跑 `e2e:chain` ALL PASS（含物理表核验与服务端公式权威重算）。公网暴露需另配域名/HTTPS/防火墙，当前仅绑定 `127.0.0.1`。
+
+CI 采用 **GitHub Actions 单平台**门禁：`.github/workflows/ci.yml` 在 PR 与 main/master/develop push 触发 `pnpm run typecheck` → `pnpm --filter @hengyida/shared build` → `pnpm test` → `docker compose config -q`（根 + dev/staging/prod 四套），CI 使用占位凭据，不依赖真实 `.env`（早期 GitLab CI 已移除，详见 README）。
 
 可观测性采用 **pino** 结构化 JSON 日志（含 `pino-http` 请求日志），`Authorization` / Cookie / 密码 / JWT 字段统一脱敏。根路径 `GET /healthz` 绕过 `/api` 前缀与响应包装，返回 DB ping、版本、部署模式与运行时长，DB 异常返回 503；server 容器 healthcheck 直接复用该端点。
 

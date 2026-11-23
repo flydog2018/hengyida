@@ -142,11 +142,11 @@ ls -lh backups
 
 三套环境各自独立项目名、容器名、宿主端口与命名卷，互不影响：
 
-| 环境 | 编排 | 本地 env | MySQL 宿主端口 | Server 宿主端口 |
+| 环境 | 编排 | 本地 env | MySQL 宿主端口 | 对外 HTTP 入口 |
 | --- | --- | --- | --- | --- |
-| dev | `deployments/dev/docker-compose.yml` | `deployments/dev/.env` | 3306 | 3000 |
+| dev | `deployments/dev/docker-compose.yml` | `deployments/dev/.env` | 3306 | 3000（设计器 5173 / 运行端 5174） |
 | staging | `deployments/staging/docker-compose.yml` | `deployments/staging/.env` | 3307 | 3001 |
-| prod | `deployments/prod/docker-compose.yml` | `deployments/prod/.env` | 3308 | 3002 |
+| prod | `deployments/prod/docker-compose.yml` | `deployments/prod/.env` | 3308 | **3002（web/nginx 统一入口，后端不直接暴露）** |
 
 ```bash
 cp deployments/prod/.env.example deployments/prod/.env
@@ -157,6 +157,48 @@ docker compose -f deployments/prod/docker-compose.yml --env-file deployments/pro
 prod 基线额外启用：MySQL 只读根文件系统 + `tmpfs`、CPU/内存限额、`restart: always`、`no-new-privileges`。三个环境的 `.env` 均被 `.gitignore` 忽略。
 
 本地快速校验全部编排：`pnpm run compose:check`。
+
+## 生产部署（本机演练：前端 + 后端全栈）
+
+`prod` 编排含 4 个服务：`mysql`（3308）、`server`（仅 Docker 内网，不映射宿主机）、`web`（nginx 统一入口 3002）、`mysql-backup`。前端由 `Dockerfile.frontend` 多阶段构建：设计器挂 `/designer/`、运行端挂 `/`，nginx 将 `/api/` 原样反代到 `server:3000`，`/healthz` 同样反代。
+
+一键启动：
+
+```bash
+# 1. 准备生产 env（强随机凭据，仅本地，已被 .gitignore 忽略）
+cp deployments/prod/.env.example deployments/prod/.env
+# 替换 MYSQL_ROOT_PASSWORD / MYSQL_PASSWORD / JWT_SECRET 为强随机值（可用 pnpm run secrets:rotate 生成后填入）
+
+# 2. 构建并启动全栈（首次构建需拉取镜像、编译前后端，约 2-4 分钟）
+docker compose -f deployments/prod/docker-compose.yml --env-file deployments/prod/.env up -d --build
+
+# 3. 等待全部 healthy（web 的 healthcheck 走 /healthz 反代）
+docker compose -f deployments/prod/docker-compose.yml ps
+
+# 4. 迁移基线表（新卷首次部署必做；指向生产库 3308）
+DB_HOST=127.0.0.1 DB_PORT=3308 DB_USER=hengyida DB_PASSWORD=<PROD_MYSQL_PASSWORD> DB_NAME=hengyida \
+  pnpm run migrate
+```
+
+访问入口（仅绑定 `127.0.0.1`，公网暴露需另行配置域名/HTTPS/防火墙）：
+
+| 路径 | 说明 |
+| --- | --- |
+| `http://127.0.0.1:3002/` | 运行端（表单填报，支持 `?formId=`） |
+| `http://127.0.0.1:3002/designer/` | 设计器（搭建/发布） |
+| `http://127.0.0.1:3002/api/v1/...` | 后端 API（经 nginx 反代） |
+| `http://127.0.0.1:3002/healthz` | 健康检查（DB ping + 版本） |
+
+主链路验证（API 走 web 反代，DB 直连生产库核验物理表）：
+
+```bash
+E2E_BASE_URL=http://127.0.0.1:3002/api \
+DB_HOST=127.0.0.1 DB_PORT=3308 DB_USER=hengyida DB_PASSWORD=<PROD_MYSQL_PASSWORD> DB_NAME=hengyida \
+  pnpm run e2e:chain
+# 期望 [wsl2] PASS → ALL PASS（搭建→发布→自动建表→填报→渲染）
+```
+
+> 生产构建通过 `ENV VITE_API_BASE_URL=/api` 让前端调用同域 API，产物中**无硬编码 localhost**；设计器 `VITE_BASE=/designer/`、运行端 `VITE_BASE=/`，均由 Dockerfile 在 Linux 容器内注入（避开 Windows shell 的路径转换问题）。本地 `pnpm dev` 行为不受影响。
 
 ## CI/CD
 

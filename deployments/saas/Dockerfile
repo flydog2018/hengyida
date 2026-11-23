@@ -7,8 +7,11 @@ COPY package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages ./packages
 # 使用国内镜像并配合 lockfile 缓存，避免默认源在容器内解析缓慢
 RUN npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
-# 先编译 shared（供 server 解析类型与运行时），再编译 server
-RUN npm run build -w @hengyida/shared && npm run build -w @hengyida/server
+# 先编译 shared（供 server 解析类型与运行时），再编译 server。
+# 显式用根 tsc：npm workspace 运行子包脚本时会把 PATH 指向子包 node_modules/.bin，
+# 而 lockfile 将 typescript 提升到根，导致 'tsc' 在子包脚本中找不到（MODULE_NOT_FOUND）。
+RUN ./node_modules/.bin/tsc -p packages/shared/tsconfig.json \
+ && ./node_modules/.bin/tsc -p packages/server/tsconfig.build.json
 
 FROM node:20-alpine AS runner
 WORKDIR /app

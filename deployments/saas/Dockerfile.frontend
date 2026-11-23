@@ -1,0 +1,27 @@
+# 恒易搭前端生产镜像：设计器(/designer/) + 运行端(/) 静态托管 + nginx 反代 API
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package.json pnpm-workspace.yaml package-lock.json tsconfig.base.json tsconfig.json ./
+COPY packages ./packages
+RUN npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
+
+# shared 需先编译产物，供 designer/runtime 的 tsc 解析类型。
+# 显式用根 tsc，避开 npm workspace 子包脚本的 PATH 提升问题（见 saas/Dockerfile 注释）。
+RUN ./node_modules/.bin/tsc -p packages/shared/tsconfig.json
+
+# 生产构建：API 走同域 /api（由 nginx 反代到 server），base 通过 ENV 注入（Linux 无 Windows 路径转换问题）
+ENV VITE_API_BASE_URL=/api
+ENV VITE_BASE=/designer/
+RUN cd packages/designer \
+ && ../../node_modules/.bin/tsc --noEmit -p tsconfig.json \
+ && ../../node_modules/.bin/vite build
+ENV VITE_BASE=/
+RUN cd packages/runtime \
+ && ../../node_modules/.bin/tsc --noEmit -p tsconfig.json \
+ && ../../node_modules/.bin/vite build
+
+FROM nginx:1.27-alpine AS runner
+COPY deployments/prod/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/packages/designer/dist /usr/share/nginx/html/designer
+COPY --from=builder /app/packages/runtime/dist /usr/share/nginx/html/runtime
+EXPOSE 80
